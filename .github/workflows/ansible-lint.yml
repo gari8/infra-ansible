@@ -1,0 +1,19 @@
+name: Ansible Lint
+on: [push]
+jobs:
+  lint:
+    name: Run ansible-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      - name: Set vault-pass
+        shell: bash
+        env:
+          VAULT_PASS_CONTENT: ${{ secrets.VAULT_PASS_CONTENT }}
+        run: echo "$VAULT_PASS_CONTENT" > vault-pass
+      - name: Install Ansible collections
+        run: |
+          ansible-galaxy collection install -r requirements.yml
+      - name: Run ansible-lint
+        uses: ansible/ansible-lint-action@v6

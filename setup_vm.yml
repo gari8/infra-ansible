@@ -1,0 +1,10 @@
+---
+- name: Setup VMs
+  hosts: host_os
+  become: true
+  become_user: root
+  roles:
+    - kvm
+  vars:
+    kvm_vms:
+      - name: "vm0"

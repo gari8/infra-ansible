@@ -1,0 +1,13 @@
+---
+kvm_vm_defaults:
+  base_name: "vm"
+  memory: 1024
+  cpus: 1
+  disk_size: 10
+  network: "default"
+  os_variant: "ubuntu22.04"
+  type: "qcow2"
+  state: "running"
+  iso_path: "/var/lib/libvirt/images/ubuntu-22.04.iso"
+  iso_url: "https://releases.ubuntu.com/jammy/ubuntu-22.04.5-live-server-amd64.iso"
+kvm_vms: []

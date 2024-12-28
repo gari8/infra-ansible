@@ -1,0 +1,104 @@
+- name: Install libvirt-utils
+  ansible.builtin.apt:
+    name:
+      - qemu-kvm
+      - libvirt-daemon-system
+      - libvirt-clients
+      - virtinst
+      - bridge-utils
+      - python3-lxml
+    state: present
+    update_cache: true
+- name: Setup ISO
+  block:
+    - name: Ensure ISO directory exists
+      ansible.builtin.file:
+        path: "{{ (item.iso_path | default(kvm_vm_defaults.iso_path)) | dirname }}"
+        state: directory
+        mode: "0644"
+      loop: "{{ kvm_vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Check if ISO file exists
+      ansible.builtin.stat:
+        path: "{{ item.iso_path | default(kvm_vm_defaults.iso_path) }}"
+      register: iso_stat
+      loop: "{{ kvm_vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Download ISO for each VM
+      ansible.builtin.get_url:
+        url: "{{ item.iso_url | default(kvm_vm_defaults.iso_url) }}"
+        dest: "{{ item.iso_path | default(kvm_vm_defaults.iso_path) }}"
+        mode: "0644"
+        force: true
+      when: not item.stat.exists
+      with_items: "{{ iso_stat.results }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+      retries: 3
+- name: Get existing VMs on KVM host
+  community.libvirt.virt:
+    command: list_vms
+  register: existing_vms
+  changed_when: false
+- name: Ensure VMs
+  block:
+    - name: Create or validate virtual disk
+      ansible.builtin.command:
+        cmd: qemu-img create -f qcow2 /var/lib/libvirt/images/{{ item.name }}.qcow2 {{ item.disk_size | default(kvm_vm_defaults.disk_size) }}G
+        creates: /var/lib/libvirt/images/{{ item.name }}.qcow2
+      loop: "{{ kvm_vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Generate XML configuration for VMs
+      ansible.builtin.template:
+        src: vm_template.xml.j2
+        dest: "/var/lib/libvirt/images/{{ item.name }}.xml"
+        mode: "0644"
+      loop: "{{ kvm_vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Define vm from xml and set autostart
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        command: define
+        xml: "{{ lookup('template', 'vm_template.xml.j2') }}"
+        autostart: true
+        force: true
+      when: item.name not in existing_vms.list_vms
+      loop: "{{ kvm_vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Ensure VM using XML
+      community.libvirt.virt:
+        name: "{{ item.name }}"
+        state: "{{ item.state | default(kvm_vm_defaults.state) }}"
+        xml: "/var/lib/libvirt/images/{{ item.name }}.xml"
+      loop: "{{ kvm_vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+- name: Calculate VMs to delete
+  ansible.builtin.set_fact:
+    vms_to_delete: "{{ existing_vms.list_vms | difference(kvm_vms | map(attribute='name') | list) }}"
+- name: Cleanup unused VMs
+  when: vms_to_delete | length > 0
+  block:
+    - name: Get state of VMs to delete
+      community.libvirt.virt:
+        name: "{{ item }}"
+        command: status
+      register: vm_state
+      failed_when: false
+      changed_when: false
+      loop: "{{ vms_to_delete }}"
+      loop_control:
+        label: "{{ item }}"
+    - name: Destroy running VMs
+      community.libvirt.virt:
+        name: "{{ item.item }}"
+        command: undefine
+        force: true
+      loop: "{{ vm_state.results }}"
+      loop_control:
+        label: "{{ item.item }}"

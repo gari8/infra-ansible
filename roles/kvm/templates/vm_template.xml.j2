@@ -1,0 +1,38 @@
+<domain type='kvm'>
+  <name>{{ item.name }}</name>
+  <memory unit='MiB'>{{ item.memory | default(kvm_vm_defaults.memory) }}</memory>
+  <vcpu>{{ item.cpus | default(kvm_vm_defaults.cpus) }}</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-i440fx-5.2'>hvm</type>
+    <boot dev='cdrom'/>
+    <boot dev='hd'/>
+  </os>
+  <devices>
+    <!-- Disk configuration -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='{{ item.disk_type | default(kvm_vm_defaults.type) }}'/>
+      <source file='/var/lib/libvirt/images/{{ item.name }}.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    
+    <!-- Network configuration -->
+    <interface type='network'>
+      <source network='{{ item.network | default(kvm_vm_defaults.network) }}'/>
+      <model type='virtio'/>
+    </interface>
+
+    <!-- Graphics and Console -->
+    <graphics type='vnc' port='-1' autoport='yes'/>
+    <console type='pty'/>
+
+    <!-- CD-ROM (ISO) -->
+    {% if item.iso_path | default(kvm_vm_defaults.iso_path) %}
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='{{ item.iso_path | default(kvm_vm_defaults.iso_path) }}'/>
+      <target dev='hdc' bus='ide'/>
+      <readonly/>
+    </disk>
+    {% endif %}
+  </devices>
+</domain>
